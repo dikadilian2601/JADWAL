@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Jadwal Kerja Mandiri</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general body styling */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top to prevent weird centering on larger content */
+            min-height: 100vh;
+            padding: 2rem 1rem; /* Add padding for better spacing on all screens */
+        }
+        /* Custom modal styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 2rem;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-xl */
+            width: 90%;
+            max-width: 500px; /* Max width for modal */
+            text-align: center;
+        }
+        /* Override max-width for larger modal content (e.g., recap) */
+        .modal-content.max-w-2xl {
+            max-width: 768px; /* Tailwind's max-w-2xl */
+        }
+        .modal-content.max-w-4xl {
+            max-width: 1024px; /* Tailwind's max-w-4xl for daily recap table */
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .assign-shift-btn:disabled {
+            @apply bg-gray-300 text-gray-500 cursor-not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center text-white text-xl z-[1001] hidden">
+        Memuat...
+    </div>
+
+    <!-- Initial Landing Page -->
+    <div id="landingPage" class="container bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Selamat Datang di Aplikasi Jadwal Kerja</h1>
+        <p class="text-gray-600 mb-8">Pilih mode akses Anda:</p>
+        <div class="space-y-4">
+            <button id="employeeModeBtn" class="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">
+                Saya Pegawai
+            </button>
+            <button id="supervisorModeBtn" class="w-full px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-300 ease-in-out shadow-md">
+                Saya Supervisor
+            </button>
+        </div>
+    </div>
+
+    <!-- Supervisor Auth Page -->
+    <div id="supervisorAuthPage" class="container bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center hidden">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Akses Supervisor</h1>
+        <div class="mb-4">
+            <label for="supervisorEmail" class="block text-gray-700 text-sm font-bold mb-2 text-left">Email:</label>
+            <input type="email" id="supervisorEmail" placeholder="supervisor@example.com"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-6">
+            <label for="supervisorPassword" class="block text-gray-700 text-sm font-bold mb-2 text-left">Kata Sandi:</label>
+            <input type="password" id="supervisorPassword" placeholder="********"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="space-y-4">
+            <button id="supervisorLoginBtn" class="w-full px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300 ease-in-out shadow-md">
+                Login Supervisor
+            </button>
+            <button id="supervisorSignupBtn" class="w-full px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-300 ease-in-out shadow-md">
+                Daftar Supervisor Baru
+            </button>
+            <button id="backToLandingBtn" class="w-full px-6 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-300 ease-in-out shadow-md">
+                Kembali
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Application UI -->
+    <div id="mainApp" class="container bg-white p-8 rounded-xl shadow-lg w-full max-w-4xl hidden">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Aplikasi Jadwal Kerja Mandiri</h1>
+        <p class="text-gray-600 text-center mb-8">Selamat datang, <span id="loggedInEmployeeName" class="font-bold text-blue-700"></span> (<span id="loggedInUserId" class="text-sm text-gray-500"></span>)! Silakan pilih shift Anda untuk setiap hari, dengan batasan yang telah ditentukan.</p>
+
+        <!-- Bulan dan Tahun Picker -->
+        <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200 flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <div class="w-full sm:w-auto">
+                <label for="monthSelect" class="block text-purple-800 text-lg font-semibold mb-2 sm:mb-0">Pilih Bulan:</label>
+                <select id="monthSelect" class="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 ease-in-out text-gray-700">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            <div class="w-full sm:w-auto">
+                <label for="yearInput" class="block text-purple-800 text-lg font-semibold mb-2 sm:mb-0">Tahun:</label>
+                <input type="number" id="yearInput" min="2020" max="2050" value="2024"
+                       class="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 ease-in-out text-gray-700">
+            </div>
+            <button id="generateScheduleBtn" class="w-full sm:w-auto px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition duration-300 ease-in-out shadow-md mt-4 sm:mt-0">
+                Buat Jadwal
+            </button>
+        </div>
+
+        <!-- Supervisor Access Section - only visible to supervisor -->
+        <div id="supervisorSection" class="mb-6 p-4 bg-gray-100 rounded-lg border border-gray-200 text-center hidden">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Pengaturan Supervisor</h2>
+            <div class="flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                <button id="setLeaveLimitsBtn" class="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition duration-300 ease-in-out shadow-md">
+                    Set Batas Cuti Bulanan
+                </button>
+                <button id="changeSupervisorPasswordBtn" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">
+                    Ubah Kata Sandi Supervisor
+                </button>
+            </div>
+        </div>
+        <button id="logoutBtn" class="w-full sm:w-auto px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-300 ease-in-out shadow-md mt-4">
+            Logout
+        </button>
+
+        <div class="overflow-x-auto mt-8">
+            <table class="min-w-full bg-white rounded-lg shadow overflow-hidden">
+                <thead class="bg-gray-100 border-b border-gray-200">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">Hari & Tanggal</th>
+                        <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Dinas Pagi (Max 2)</th>
+                        <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Dinas Siang (Max 2)</th>
+                        <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Dinas Malam (Max 1)</th>
+                        <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Libur (Max N)</th>
+                        <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Extra Libur (Otomatis)</th>
+                    </tr>
+                </thead>
+                <tbody id="scheduleBody" class="divide-y divide-gray-100">
+                    <!-- Schedule rows will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-8 text-center space-x-4 flex flex-col sm:flex-row justify-center items-center">
+            <button id="showRecapBtn" class="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-300 ease-in-out shadow-md mb-2 sm:mb-0">
+                Lihat Rekap Bulanan (Ringkasan Shift)
+            </button>
+            <button id="showDailyRecapBtn" class="px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition duration-300 ease-in-out shadow-md">
+                Lihat Rangkuman Jadwal Harian
+            </button>
+        </div>
+
+        <!-- Modal untuk pesan kesalahan atau informasi -->
+        <div id="infoModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button">&times;</span>
+                <p id="modalMessage" class="text-lg font-semibold text-gray-700"></p>
+                <button id="modalCloseBtn" class="mt-6 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">Tutup</button>
+            </div>
+        </div>
+
+        <!-- Rekap Bulanan Modal -->
+        <div id="recapModal" class="modal">
+            <div class="modal-content max-w-2xl">
+                <span class="close-button recap-close-button">&times;</span>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Rekap Jadwal Bulanan</h2>
+                <div id="recapContent" class="overflow-x-auto text-left">
+                    <!-- Recap table will be populated here -->
+                </div>
+                <div class="mt-6 text-center">
+                    <button id="downloadMonthlyRecapCsvBtn" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300 ease-in-out shadow-md mr-2">Unduh Rekap Bulanan (CSV)</button>
+                    <button id="recapCloseBtn" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">Tutup</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Recap Modal -->
+        <div id="dailyRecapModal" class="modal">
+            <div class="modal-content max-w-4xl">
+                <span class="close-button daily-recap-close-button">&times;</span>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Rangkuman Jadwal Harian per Petugas</h2>
+                <div id="dailyRecapContent" class="overflow-x-auto text-left">
+                    <!-- Daily recap table will be populated here -->
+                </div>
+                <div class="mt-6 text-center">
+                    <button id="downloadDailyRecapCsvBtn" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300 ease-in-out shadow-md mr-2">Unduh Rangkuman Harian (CSV)</button>
+                    <button id="dailyRecapCloseBtn" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">Tutup</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Set Leave Limits Modal -->
+        <div id="setLeaveLimitsModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button set-leave-limits-close-button">&times;</span>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Set Batas Cuti Bulanan (Supervisor)</h2>
+                <p class="text-gray-600 mb-4">Masukkan nama pegawai dan batas cuti bulanan (dalam hari), satu per baris.</p>
+                <p class="text-gray-600 text-sm mb-4">Contoh: <code>Budi:5</code> atau <code>Citra:7</code></p>
+                <textarea id="leaveLimitsInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ease-in-out text-gray-700 h-40 mb-4" placeholder="NamaPegawai:JumlahCuti"></textarea>
+                <div id="currentLeaveLimitsDisplay" class="mb-4 p-3 bg-gray-100 rounded-lg text-left text-sm text-gray-700">
+                    <p class="font-semibold">Batas Cuti Saat Ini:</p>
+                    <ul id="leaveLimitsList">
+                        <!-- Current limits will be displayed here -->
+                    </ul>
+                </div>
+                <button id="saveLeaveLimitsBtn" class="mt-4 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">Simpan Batas Cuti</button>
+            </div>
+        </div>
+
+        <!-- Change Supervisor Password Modal -->
+        <div id="changePasswordModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button change-password-close-button">&times;</span>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Ubah Kata Sandi Supervisor</h2>
+                <div class="mb-4">
+                    <label for="currentPasswordInput" class="block text-gray-700 text-sm font-bold mb-2">Kata Sandi Saat Ini:</label>
+                    <input type="password" id="currentPasswordInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
+                </div>
+                <div class="mb-4">
+                    <label for="newPasswordInput" class="block text-gray-700 text-sm font-bold mb-2">Kata Sandi Baru:</label>
+                    <input type="password" id="newPasswordInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="new-password">
+                </div>
+                <div class="mb-4">
+                    <label for="confirmNewPasswordInput" class="block text-gray-700 text-sm font-bold mb-2">Konfirmasi Kata Sandi Baru:</label>
+                    <input type="password" id="confirmNewPasswordInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="new-password">
+                </div>
+                <button id="saveNewPasswordBtn" class="mt-4 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">Simpan Kata Sandi Baru</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, updatePassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global state variables
+        let currentUser = null;
+        let isSupervisor = false;
+        let loggedInEmployeeName = '';
+        let currentSchedule = {}; // Schedule for the *currently logged in* user for the current month
+        let monthlyEmployeeLeaveLimits = {}; // Supervisor-set limits for all employees
+
+        // UI elements
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const landingPage = document.getElementById('landingPage');
+        const employeeModeBtn = document.getElementById('employeeModeBtn');
+        const supervisorModeBtn = document.getElementById('supervisorModeBtn');
+        const supervisorAuthPage = document.getElementById('supervisorAuthPage');
+        const supervisorEmailInput = document.getElementById('supervisorEmail');
+        const supervisorPasswordInput = document.getElementById('supervisorPassword');
+        const supervisorLoginBtn = document.getElementById('supervisorLoginBtn');
+        const supervisorSignupBtn = document.getElementById('supervisorSignupBtn');
+        const backToLandingBtn = document.getElementById('backToLandingBtn');
+        const mainApp = document.getElementById('mainApp');
+        const loggedInEmployeeNameSpan = document.getElementById('loggedInEmployeeName');
+        const loggedInUserIdSpan = document.getElementById('loggedInUserId');
+        const supervisorSection = document.getElementById('supervisorSection');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        // Main app elements (already defined, just for reference)
+        const scheduleBody = document.getElementById('scheduleBody');
+        const monthSelect = document.getElementById('monthSelect');
+        const yearInput = document.getElementById('yearInput');
+        const generateScheduleBtn = document.getElementById('generateScheduleBtn');
+        const infoModal = document.getElementById('infoModal');
+        const modalMessage = document.getElementById('modalMessage');
+        const closeButton = document.querySelector('.close-button');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        const showRecapBtn = document.getElementById('showRecapBtn');
+        const recapModal = document.getElementById('recapModal');
+        const recapContent = document.getElementById('recapContent');
+        const recapCloseButton = document.querySelector('.recap-close-button');
+        const recapCloseBtn = document.getElementById('recapCloseBtn');
+        const downloadMonthlyRecapCsvBtn = document.getElementById('downloadMonthlyRecapCsvBtn');
+        const showDailyRecapBtn = document.getElementById('showDailyRecapBtn');
+        const dailyRecapModal = document.getElementById('dailyRecapModal');
+        const dailyRecapContent = document.getElementById('dailyRecapContent');
+        const dailyRecapCloseButton = document.querySelector('.daily-recap-close-button');
+        const dailyRecapCloseBtn = document.getElementById('dailyRecapCloseBtn');
+        const downloadDailyRecapCsvBtn = document.getElementById('downloadDailyRecapCsvBtn');
+        const setLeaveLimitsBtn = document.getElementById('setLeaveLimitsBtn');
+        const setLeaveLimitsModal = document.getElementById('setLeaveLimitsModal');
+        const leaveLimitsInput = document.getElementById('leaveLimitsInput');
+        const currentLeaveLimitsDisplay = document.getElementById('currentLeaveLimitsDisplay');
+        const leaveLimitsList = document.getElementById('leaveLimitsList');
+        const saveLeaveLimitsBtn = document.getElementById('saveLeaveLimitsBtn');
+        const setLeaveLimitsCloseButton = document.querySelector('.set-leave-limits-close-button');
+        const changeSupervisorPasswordBtn = document.getElementById('changeSupervisorPasswordBtn');
+        const changePasswordModal = document.getElementById('changePasswordModal');
+        const currentPasswordInput = document.getElementById('currentPasswordInput');
+        const newPasswordInput = document.getElementById('newPasswordInput');
+        const confirmNewPasswordInput = document.getElementById('confirmNewPasswordInput');
+        const saveNewPasswordBtn = document.getElementById('saveNewPasswordBtn');
+        const changePasswordCloseButton = document.querySelector('.change-password-close-button');
+
+
+        // Configuration for shift limits based on weekday or Sunday
+        const DAILY_SHIFT_CONFIG = {
+            'weekday': { // Monday (1) to Saturday (6)
+                'Pagi': 2,
+                'Siang': 2,
+                'Malam': 1,
+                'Libur': 3, // Max daily libur slots
+                'ExtraLibur': 8 // High limit, as it's auto-assigned, not manually chosen
+            },
+            'sunday': { // Sunday (0)
+                'Pagi': 1,
+                'Siang': 2,
+                'Malam': 1,
+                'Libur': 4, // Max daily libur slots
+                'ExtraLibur': 8 // High limit, as it's auto-assigned, not manually chosen
+            }
+        };
+
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+
+        // Nama hari dalam Bahasa Indonesia
+        const HARI_INDONESIA = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+        // Nama bulan dalam Bahasa Indonesia
+        const BULAN_INDONESIA = [
+            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+
+        // --- Utility Functions ---
+
+        /**
+         * Get the specific shift limits for a given dateKey.
+         * @param {string} dateKey - The date in YYYY-MM-DD format.
+         * @returns {object} Shift limits for the given day.
+         */
+        function getCurrentShiftLimits(dateKey) {
+            const date = new Date(dateKey);
+            const dayOfWeek = date.getDay(); // 0 for Sunday, 1 for Monday...
+            if (dayOfWeek === 0) { // Sunday
+                return DAILY_SHIFT_CONFIG['sunday'];
+            } else { // Monday to Saturday
+                return DAILY_SHIFT_CONFIG['weekday'];
+            }
+        }
+
+        /**
+         * Get number of days in a month.
+         * @param {number} year - The year.
+         * @param {number} month - The month (0-11).
+         * @returns {number} Number of days.
+         */
+        function getDaysInMonth(year, month) {
+            return new Date(year, month + 1, 0).getDate();
+        }
+
+        /**
+         * Generate date strings for a month.
+         * @param {number} year - The year.
+         * @param {number} month - The month (0-11).
+         * @returns {string[]} Array of formatted date strings.
+         */
+        function generateDatesForMonth(year, month) {
+            const numDays = getDaysInMonth(year, month);
+            const dates = [];
+            for (let i = 1; i <= numDays; i++) {
+                const date = new Date(year, month, i);
+                const dayName = HARI_INDONESIA[date.getDay()];
+                dates.push(`${i} ${BULAN_INDONESIA[month]} (${dayName})`);
+            }
+            return dates;
+        }
+
+        /**
+         * Show modal message.
+         * @param {string} message - Message to display.
+         */
+        function showModal(message) {
+            modalMessage.textContent = message;
+            infoModal.style.display = 'flex';
+        }
+
+        /**
+         * Hide modal.
+         */
+        function hideModal() {
+            infoModal.style.display = 'none';
+        }
+
+        /**
+         * Helper function to get a date key for relative days.
+         * @param {string} baseDateKey - Base date in YYYY-MM-DD.
+         * @param {number} offsetDays - Days to offset.
+         * @returns {string} New date key.
+         */
+        function getDateKeyRelative(baseDateKey, offsetDays) {
+            const baseDate = new Date(baseDateKey);
+            const targetDate = new Date(baseDate);
+            targetDate.setDate(baseDate.getDate() + offsetDays);
+            return `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+        }
+
+        /**
+         * Check if an employee is assigned to any shift on a specific date.
+         * @param {string} dateKey - Date in YYYY-MM-DD.
+         * @param {string} employeeName - Employee name.
+         * @returns {boolean} True if assigned, false otherwise.
+         */
+        function isEmployeeAssigned(dateKey, employeeName) {
+            const daySchedule = currentSchedule[dateKey];
+            if (!daySchedule) return false;
+            for (const shiftType of ['Pagi', 'Siang', 'Malam', 'Libur', 'ExtraLibur']) {
+                if (daySchedule[shiftType] && daySchedule[shiftType].includes(employeeName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Get the shift type an employee is assigned to on a specific date.
+         * @param {string} dateKey - Date in YYYY-MM-DD.
+         * @param {string} employeeName - Employee name.
+         * @returns {string} Shift type or 'Tidak Terjadwal'.
+         */
+        function getEmployeeAssignedShift(dateKey, employeeName) {
+            const daySchedule = currentSchedule[dateKey];
+            if (!daySchedule) return 'Tidak Terjadwal';
+            for (const shiftType of ['Pagi', 'Siang', 'Malam', 'Libur', 'ExtraLibur']) {
+                if (daySchedule[shiftType] && daySchedule[shiftType].includes(employeeName)) {
+                    return shiftType;
+                }
+            }
+            return 'Tidak Terjadwal';
+        }
+
+        /**
+         * Count 'Libur' days for an employee.
+         * @param {string} employeeName - Employee name.
+         * @returns {number} Count of 'Libur' days.
+         */
+        function countEmployeeMonthlyLeave(employeeName) {
+            let liburCount = 0;
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                if (currentSchedule[dateKey] && currentSchedule[dateKey]['Libur'] && currentSchedule[dateKey]['Libur'].includes(employeeName)) {
+                    liburCount++;
+                }
+            }
+            return liburCount;
+        }
+
+        // --- Firebase/Auth Functions ---
+
+        /**
+         * Initializes user profile in Firestore if it doesn't exist.
+         * @param {string} uid - User ID.
+         * @param {string} name - Employee name.
+         * @param {boolean} isSup - Is supervisor.
+         */
+        async function initializeUserProfile(uid, name, isSup) {
+            const userDocRef = doc(db, `artifacts/${appId}/users/${uid}`);
+            const userDocSnap = await getDoc(userDocRef);
+            if (!userDocSnap.exists()) {
+                await setDoc(userDocRef, { employeeName: name, isSupervisor: isSup });
+            } else {
+                // Update name if it's an employee logging in anonymously for the first time with a name.
+                // Or if supervisor changes their name.
+                await updateDoc(userDocRef, { employeeName: name });
+            }
+        }
+
+        /**
+         * Handles user state changes from Firebase Auth.
+         * @param {object} user - Firebase user object or null.
+         */
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                // Fetch user profile to determine if they are a supervisor and get their name
+                const userDocRef = doc(db, `artifacts/${appId}/users/${user.uid}`);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    isSupervisor = userData.isSupervisor || false;
+                    loggedInEmployeeName = userData.employeeName || (isSupervisor ? 'Supervisor' : 'Pegawai Anonim');
+                    loggedInEmployeeNameSpan.textContent = loggedInEmployeeName;
+                    loggedInUserIdSpan.textContent = user.uid; // Display full UID
+                    showMainApp();
+                } else {
+                    // This case should ideally not happen if initializeUserProfile is called correctly on login/signup
+                    // For anonymous users, we need to prompt for a name.
+                    if (user.isAnonymous) {
+                         let name = prompt("Masukkan nama Anda (misal: Budi):");
+                         while (!name || name.trim() === '') {
+                             name = prompt("Nama tidak boleh kosong. Mohon masukkan nama Anda:");
+                         }
+                         loggedInEmployeeName = name.trim();
+                         await initializeUserProfile(user.uid, loggedInEmployeeName, false);
+                         loggedInEmployeeNameSpan.textContent = loggedInEmployeeName;
+                         loggedInUserIdSpan.textContent = user.uid;
+                         showMainApp();
+                    } else {
+                        // For email/password user, if profile doesn't exist, something went wrong during signup
+                        showModal("Profil pengguna tidak ditemukan. Silakan coba lagi.");
+                        await signOut(auth); // Force logout
+                        showLandingPage();
+                    }
+                }
+            } else {
+                currentUser = null;
+                isSupervisor = false;
+                loggedInEmployeeName = '';
+                loggedInEmployeeNameSpan.textContent = '';
+                loggedInUserIdSpan.textContent = '';
+                showLandingPage();
+            }
+            loadingOverlay.classList.add('hidden'); // Hide loading overlay once auth state is processed
+        });
+
+        /**
+         * Sign in anonymously for employees.
+         */
+        async function signInEmployee() {
+            loadingOverlay.classList.remove('hidden');
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Error signing in employee:", error);
+                showModal(`Gagal masuk sebagai pegawai: ${error.message}`);
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Handle supervisor login.
+         */
+        async function handleSupervisorLogin() {
+            const email = supervisorEmailInput.value;
+            const password = supervisorPasswordInput.value;
+            if (!email || !password) {
+                showModal("Email dan kata sandi harus diisi.");
+                return;
+            }
+            loadingOverlay.classList.remove('hidden');
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                await initializeUserProfile(userCredential.user.uid, 'Supervisor', true);
+                // Auth state change listener will handle showing the main app
+            } catch (error) {
+                console.error("Error logging in supervisor:", error);
+                showModal(`Gagal login supervisor: ${error.message}`);
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Handle supervisor signup.
+         */
+        async function handleSupervisorSignup() {
+            const email = supervisorEmailInput.value;
+            const password = supervisorPasswordInput.value;
+            if (!email || !password) {
+                showModal("Email dan kata sandi harus diisi.");
+                return;
+            }
+            loadingOverlay.classList.remove('hidden');
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await initializeUserProfile(userCredential.user.uid, 'Supervisor', true);
+                // Auth state change listener will handle showing the main app
+            } catch (error) {
+                console.error("Error signing up supervisor:", error);
+                showModal(`Gagal daftar supervisor: ${error.message}`);
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Handle logout.
+         */
+        async function handleLogout() {
+            loadingOverlay.classList.remove('hidden');
+            try {
+                await signOut(auth);
+                // onAuthStateChanged will handle showing landing page
+            } catch (error) {
+                console.error("Error logging out:", error);
+                showModal(`Gagal logout: ${error.message}`);
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        // --- UI Navigation ---
+
+        function showLandingPage() {
+            landingPage.classList.remove('hidden');
+            supervisorAuthPage.classList.add('hidden');
+            mainApp.classList.add('hidden');
+        }
+
+        function showSupervisorAuthPage() {
+            landingPage.classList.add('hidden');
+            supervisorAuthPage.classList.remove('hidden');
+            mainApp.classList.add('hidden');
+            supervisorEmailInput.value = '';
+            supervisorPasswordInput.value = '';
+        }
+
+        async function showMainApp() {
+            landingPage.classList.add('hidden');
+            supervisorAuthPage.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+
+            // Set supervisor section visibility
+            if (isSupervisor) {
+                supervisorSection.classList.remove('hidden');
+                // For supervisor, employee name input is not relevant as they see all schedules
+                // employeeNameInput.parentElement.classList.add('hidden');
+            } else {
+                supervisorSection.classList.add('hidden');
+                // employeeNameInput.parentElement.classList.remove('hidden');
+            }
+
+            // Load and render schedule for the current month/year based on auth state
+            await loadScheduleAndLimits();
+            renderSchedule();
+        }
+
+        // --- Firestore Data Operations ---
+
+        /**
+         * Load schedule for the current user and month from Firestore.
+         */
+        async function loadScheduleAndLimits() {
+            if (!currentUser) return; // Must be logged in
+
+            const scheduleDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/schedules/${currentYear}-${currentMonth}`);
+            const scheduleDocSnap = await getDoc(scheduleDocRef);
+
+            if (scheduleDocSnap.exists()) {
+                currentSchedule = scheduleDocSnap.data();
+            } else {
+                currentSchedule = {};
+            }
+
+            // Ensure all days of the current month are initialized in currentSchedule
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                if (!currentSchedule[dateKey]) {
+                    currentSchedule[dateKey] = {
+                        'Pagi': [], 'Siang': [], 'Malam': [], 'Libur': [], 'ExtraLibur': []
+                    };
+                } else { // Ensure all shift types exist for existing schedules
+                    ['Pagi', 'Siang', 'Malam', 'Libur', 'ExtraLibur'].forEach(shiftType => {
+                        if (!currentSchedule[dateKey][shiftType]) {
+                            currentSchedule[dateKey][shiftType] = [];
+                        }
+                    });
+                }
+            }
+
+            // Load monthly employee leave limits if supervisor
+            if (isSupervisor) {
+                const leaveLimitsDocRef = doc(db, `artifacts/${appId}/supervisor_config/${currentUser.uid}`);
+                const leaveLimitsDocSnap = await getDoc(leaveLimitsDocRef);
+                if (leaveLimitsDocSnap.exists() && leaveLimitsDocSnap.data().leaveLimits) {
+                    monthlyEmployeeLeaveLimits = leaveLimitsDocSnap.data().leaveLimits[`${currentYear}-${currentMonth}`] || {};
+                } else {
+                    monthlyEmployeeLeaveLimits = {};
+                }
+            }
+        }
+
+        /**
+         * Save current user's schedule to Firestore.
+         */
+        async function saveSchedule() {
+            if (!currentUser) return;
+            const scheduleDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/schedules/${currentYear}-${currentMonth}`);
+            await setDoc(scheduleDocRef, currentSchedule);
+        }
+
+        /**
+         * Save supervisor's leave limits to Firestore.
+         */
+        async function saveLeaveLimitsToFirestore(limits) {
+            if (!currentUser || !isSupervisor) return;
+            const supervisorConfigRef = doc(db, `artifacts/${appId}/supervisor_config/${currentUser.uid}`);
+            // Store limits within a nested object for the current month/year
+            await setDoc(supervisorConfigRef, {
+                leaveLimits: {
+                    [`${currentYear}-${currentMonth}`]: limits
+                }
+            }, { merge: true }); // Use merge to avoid overwriting other supervisor configs
+        }
+
+
+        // --- Schedule Rendering and Logic ---
+
+        /**
+         * Render/update the schedule table.
+         */
+        function renderSchedule() {
+            scheduleBody.innerHTML = ''; // Clear previous table content
+
+            const shifts = ['Pagi', 'Siang', 'Malam', 'Libur', 'ExtraLibur']; // Order of columns
+            const dates = generateDatesForMonth(currentYear, currentMonth);
+
+            dates.forEach((dateDisplay, index) => {
+                const dayOfMonth = index + 1;
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
+
+                // Ensure data for the current date is initialized
+                if (!currentSchedule[dateKey]) {
+                    currentSchedule[dateKey] = { 'Pagi': [], 'Siang': [], 'Malam': [], 'Libur': [], 'ExtraLibur': [] };
+                } else {
+                    shifts.forEach(s => {
+                        if (!currentSchedule[dateKey][s]) currentSchedule[dateKey][s] = [];
+                    });
+                }
+
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition duration-150 ease-in-out';
+
+                // Hari & Tanggal
+                const dayDateCell = document.createElement('td');
+                dayDateCell.className = 'py-3 px-4 text-sm font-semibold text-gray-800';
+                dayDateCell.textContent = dateDisplay;
+                row.appendChild(dayDateCell);
+
+                const currentLimits = getCurrentShiftLimits(dateKey);
+                const employeeName = loggedInEmployeeName; // Use the logged-in employee name
+
+
+                shifts.forEach(shiftType => {
+                    const cell = document.createElement('td');
+                    cell.className = 'py-3 px-4 text-center text-sm text-gray-700';
+                    const employeesInShift = currentSchedule[dateKey][shiftType] || [];
+                    const isFull = employeesInShift.length >= currentLimits[shiftType];
+                    const isEmployeeAssignedToday = isEmployeeAssigned(dateKey, employeeName);
+                    const isEmployeeAssignedToThisShift = employeesInShift.includes(employeeName);
+
+                    let cellContentHtml = formatShiftContent(employeesInShift, shiftType, dateKey);
+
+                    let showAssignButton = false;
+                    let assignButtonDisabled = false;
+                    let assignButtonText = 'Ambil Shift';
+                    let assignButtonClass = 'assign-shift-btn px-3 py-1 mt-2 text-xs bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 ease-in-out';
+
+                    if (shiftType === 'ExtraLibur') {
+                        assignButtonDisabled = true;
+                        assignButtonText = 'Otomatis';
+                        assignButtonClass = 'px-3 py-1 mt-2 text-xs bg-gray-300 text-gray-500 rounded-md cursor-not-allowed';
+                    } else if (employeeName) { // Only show buttons if an employee name is entered
+                        // Only allow 'Ambil Shift' if not supervisor or if supervisor and currently selecting for themselves.
+                        // Or, if supervisor, they can assign to anyone (complex, let's keep it simple for now: supervisor manages their own schedule via this view, not others)
+                        // For supervisor, they will use the daily recap to edit other's schedules if needed.
+                        // For now, this view is for 'self-management'.
+                        showAssignButton = true;
+                        if (isFull && !isEmployeeAssignedToThisShift) { // Full but current employee not on it
+                            assignButtonDisabled = true;
+                            assignButtonText = 'Penuh';
+                            assignButtonClass = 'px-3 py-1 mt-2 text-xs bg-gray-300 text-gray-500 rounded-md cursor-not-allowed';
+                        } else if (isEmployeeAssignedToday && !isEmployeeAssignedToThisShift) { // Employee already assigned to another shift today
+                            assignButtonDisabled = true;
+                            assignButtonText = 'Terisi Lain';
+                            assignButtonClass = 'px-3 py-1 mt-2 text-xs bg-gray-300 text-gray-500 rounded-md cursor-not-allowed';
+                        }
+                        // If the current employee is already on this shift, button shouldn't be 'Ambil Shift'
+                        if (isEmployeeAssignedToThisShift) {
+                            showAssignButton = false; // Already assigned, no "Ambil Shift" button needed.
+                        }
+                    }
+
+                    if (showAssignButton) {
+                        cellContentHtml += `
+                            <button data-shift="${shiftType}" data-datekey="${dateKey}"
+                                    class="${assignButtonClass}" ${assignButtonDisabled ? 'disabled' : ''}>
+                                ${assignButtonText}
+                            </button>`;
+                    }
+
+                    cell.innerHTML = cellContentHtml;
+                    row.appendChild(cell);
+                });
+
+                scheduleBody.appendChild(row);
+            });
+
+            // Update table headers to reflect current limits for the first day of the rendered month
+            const firstDayKeyForHeader = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(1).padStart(2, '0')}`;
+            const firstDayLimitsForHeader = getCurrentShiftLimits(firstDayKeyForHeader);
+            document.querySelector('thead th:nth-child(2)').textContent = `Dinas Pagi (Max ${firstDayLimitsForHeader['Pagi']})`;
+            document.querySelector('thead th:nth-child(3)').textContent = `Dinas Siang (Max ${firstDayLimitsForHeader['Siang']})`;
+            document.querySelector('thead th:nth-child(4)').textContent = `Dinas Malam (Max ${firstDayLimitsForHeader['Malam']})`;
+            document.querySelector('thead th:nth-child(5)').textContent = `Libur (Max ${firstDayLimitsForHeader['Libur']})`;
+            // No max for Extra Libur in header as it's not a direct input constraint
+
+
+            // Add event listeners for remove name buttons after table is rendered
+            addRemoveEventListeners();
+            addAssignEventListeners(); // Add listeners for new assign buttons
+        }
+
+        /**
+         * Format shift content for table cell.
+         * @param {string[]} employees - Array of employee names.
+         * @param {string} shiftType - Shift type.
+         * @param {string} dateKey - Date key.
+         * @returns {string} HTML string.
+         */
+        function formatShiftContent(employees, shiftType, dateKey) {
+            if (employees.length === 0) {
+                return '<span class="text-gray-500 italic">Kosong</span>';
+            }
+            let html = '<ul class="list-none p-0 m-0">';
+            employees.forEach(emp => {
+                html += `<li class="flex items-center justify-center space-x-2 py-1">
+                            <span>${emp}</span>`;
+                // Only show remove button for the logged-in employee's own shifts (and if it's not ExtraLibur)
+                if (emp === loggedInEmployeeName && shiftType !== 'ExtraLibur') {
+                     html += `<button data-employee="${emp}" data-shift="${shiftType}" data-datekey="${dateKey}"
+                                    class="remove-name-btn text-red-500 hover:text-red-700 text-lg font-bold leading-none"
+                                    title="Hapus ${emp} dari shift ini">
+                                &times;
+                            </button>`;
+                }
+                html += `</li>`;
+            });
+            html += '</ul>';
+            return html;
+        }
+
+        /**
+         * Add event listeners for remove name buttons.
+         */
+        function addRemoveEventListeners() {
+            document.querySelectorAll('.remove-name-btn').forEach(button => {
+                button.onclick = function() {
+                    const employeeToRemove = this.dataset.employee;
+                    const shift = this.dataset.shift;
+                    const dateKey = this.dataset.datekey;
+                    removeEmployeeFromShift(dateKey, shift, employeeToRemove);
+                };
+            });
+        }
+
+        /**
+         * Add event listeners for assign shift buttons.
+         */
+        function addAssignEventListeners() {
+            document.querySelectorAll('.assign-shift-btn').forEach(button => {
+                if (!button.disabled) {
+                    button.onclick = function() {
+                        const shiftType = this.dataset.shift;
+                        const dateKey = this.dataset.datekey;
+                        assignShift(dateKey, shiftType, loggedInEmployeeName);
+                    };
+                }
+            });
+        }
+
+        /**
+         * Validate night shift package (2 nights, 1 extra libur, 1 libur).
+         * @param {string} dateKey - Date for the proposed Malam shift.
+         * @param {string} employee - Employee name.
+         * @returns {object} Validation result and planned shifts.
+         */
+        function validateNightShiftPackage(dateKey, employee) {
+            const dMinus1Key = getDateKeyRelative(dateKey, -1);
+            const dPlus1Key = getDateKeyRelative(dateKey, 1);
+            const dPlus2Key = getDateKeyRelative(dateKey, 2);
+            const dPlus3Key = getDateKeyRelative(dateKey, 3);
+
+            const shift_dMinus1 = getEmployeeAssignedShift(dMinus1Key, employee);
+
+            let plannedShifts = {};
+            const currentDayLimits = getCurrentShiftLimits(dateKey);
+
+            // Ensure current day (D0) can take Malam for this employee
+            if (currentSchedule[dateKey]['Malam'].length >= currentDayLimits['Malam'] && !currentSchedule[dateKey]['Malam'].includes(employee)) {
+                return { valid: false, message: `Shift Malam pada ${dateKey} sudah penuh (${currentDayLimits['Malam']} orang).` };
+            }
+            // Check if employee is already assigned to another shift on current day (D0)
+            const employeeCurrentShiftToday = getEmployeeAssignedShift(dateKey, employee);
+            if (employeeCurrentShiftToday !== 'Tidak Terjadwal' && employeeCurrentShiftToday !== 'Malam') {
+                 return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari ini (${dateKey}) pada shift ${employeeCurrentShiftToday}.` };
+            }
+
+            if (shift_dMinus1 === 'Malam') { // D0 is potentially the 2nd night of a package
+                const shift_dMinus2 = getEmployeeAssignedShift(getDateKeyRelative(dateKey, -2), employee);
+                if (shift_dMinus2 === 'Malam') { // 3 consecutive nights
+                    return { valid: false, message: `"${employee}" tidak bisa dinas Malam 3 hari berturut-turut. Pola harus 2 Malam diikuti 1 Extra Libur dan 1 Libur.` };
+                }
+
+                // Validate D+1 for ExtraLibur
+                const shift_dPlus1 = getEmployeeAssignedShift(dPlus1Key, employee);
+                if (shift_dPlus1 !== 'Tidak Terjadwal' && shift_dPlus1 !== 'Libur' && shift_dPlus1 !== 'ExtraLibur') {
+                    return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari ${dPlus1Key}. Hari ini harus kosong (Extra Libur).` };
+                }
+                // Validate D+2 for Libur
+                const shift_dPlus2 = getEmployeeAssignedShift(dPlus2Key, employee);
+                if (shift_dPlus2 !== 'Tidak Terjadwal' && shift_dPlus2 !== 'Libur' && shift_dPlus2 !== 'ExtraLibur') {
+                    return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari ${dPlus2Key}. Hari ini harus kosong (Libur).` };
+                }
+
+                plannedShifts[dateKey] = 'Malam'; // D0 (2nd night)
+                plannedShifts[dPlus1Key] = 'ExtraLibur'; // D+1 (first extra libur)
+                plannedShifts[dPlus2Key] = 'Libur'; // D+2 (second day, regular Libur)
+
+                return { valid: true, plannedShifts };
+
+            } else { // D0 is potentially the 1st night of a package
+                // Validate D+1 for the 2nd night shift
+                const dPlus1Limits = getCurrentShiftLimits(dPlus1Key);
+                const shift_dPlus1_current = getEmployeeAssignedShift(dPlus1Key, employee);
+
+                if (shift_dPlus1_current !== 'Tidak Terjadwal' && shift_dPlus1_current !== 'Malam' && shift_dPlus1_current !== 'Libur' && shift_dPlus1_current !== 'ExtraLibur') {
+                     return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari berikutnya (${dPlus1Key}). Paket dinas Malam membutuhkan 2 hari berturut-turut.` };
+                }
+                if (currentSchedule[dPlus1Key]['Malam'].length >= dPlus1Limits['Malam'] && !currentSchedule[dPlus1Key]['Malam'].includes(employee)) {
+                     return { valid: false, message: `Shift Malam pada hari berikutnya (${dPlus1Key}) sudah penuh. Paket dinas Malam membutuhkan 2 hari berturut-turut.` };
+                }
+
+                // Validate D+2 for ExtraLibur
+                const shift_dPlus2 = getEmployeeAssignedShift(dPlus2Key, employee);
+                if (shift_dPlus2 !== 'Tidak Terjadwal' && shift_dPlus2 !== 'Libur' && shift_dPlus2 !== 'ExtraLibur') {
+                    return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari ${dPlus2Key}. Hari ini harus kosong (Extra Libur).` };
+                }
+
+                // Validate D+3 for Libur
+                const shift_dPlus3 = getEmployeeAssignedShift(dPlus3Key, employee);
+                if (shift_dPlus3 !== 'Tidak Terjadwal' && shift_dPlus3 !== 'Libur' && shift_dPlus3 !== 'ExtraLibur') {
+                    return { valid: false, message: `"${employee}" sudah ada jadwal bentrok di hari ${dPlus3Key}. Hari ini harus kosong (Libur).` };
+                }
+
+                plannedShifts[dateKey] = 'Malam'; // D0 (1st night)
+                plannedShifts[dPlus1Key] = 'Malam'; // D+1 (2nd night)
+                plannedShifts[dPlus2Key] = 'ExtraLibur'; // D+2 (first extra libur)
+                plannedShifts[dPlus3Key] = 'Libur'; // D+3 (second day, regular Libur)
+
+                return { valid: true, plannedShifts };
+            }
+        }
+
+        /**
+         * Assign an employee to a shift.
+         * @param {string} dateKey - Date key.
+         * @param {string} shiftType - Shift type.
+         * @param {string} employee - Employee name.
+         */
+        async function assignShift(dateKey, shiftType, employee) {
+            if (shiftType === 'ExtraLibur') {
+                showModal("Shift 'Extra Libur' tidak bisa dipilih secara manual. Ini otomatis setelah dinas malam.");
+                return;
+            }
+
+            const currentLimits = getCurrentShiftLimits(dateKey);
+            const prevShift = getEmployeeAssignedShift(dateKey, employee);
+
+            // If employee is already assigned to a shift on this day, remove them first
+            if (prevShift && prevShift !== 'Tidak Terjadwal') {
+                const index = currentSchedule[dateKey][prevShift].indexOf(employee);
+                if (index > -1) {
+                    currentSchedule[dateKey][prevShift].splice(index, 1);
+                }
+            }
+
+            // --- Specific handling for 'Malam' shift package ---
+            if (shiftType === 'Malam') {
+                const validationResult = validateNightShiftPackage(dateKey, employee);
+                if (!validationResult.valid) {
+                    showModal(validationResult.message);
+                    // Revert previous shift if any, before returning
+                    if (prevShift && prevShift !== 'Tidak Terjadwal') {
+                        currentSchedule[dateKey][prevShift].push(employee);
+                    }
+                    return;
+                }
+
+                // If valid, apply the entire package
+                for (const plannedDateKey in validationResult.plannedShifts) {
+                    const plannedShiftType = validationResult.plannedShifts[plannedDateKey];
+                    const existingEmployeeShiftOnPlannedDate = getEmployeeAssignedShift(plannedDateKey, employee);
+
+                    // Remove employee from any previous shift on this planned date
+                    if (existingEmployeeShiftOnPlannedDate && existingEmployeeShiftOnPlannedDate !== 'Tidak Terjadwal') {
+                        const index = currentSchedule[plannedDateKey][existingEmployeeShiftOnPlannedDate].indexOf(employee);
+                        if (index > -1) {
+                            currentSchedule[plannedDateKey][existingEmployeeShiftOnPlannedDate].splice(index, 1);
+                        }
+                    }
+
+                    // Add employee to the new planned shift
+                    if (!currentSchedule[plannedDateKey][plannedShiftType]) {
+                        currentSchedule[plannedDateKey][plannedShiftType] = []; // Should already be initialized, but for safety
+                    }
+                    currentSchedule[plannedDateKey][plannedShiftType].push(employee);
+                }
+                await saveSchedule();
+                renderSchedule();
+                showModal(`${employee} berhasil ditambahkan ke pola dinas Malam (termasuk Extra Libur dan Libur).`);
+                return; // Exit after handling Malam shift package
+            }
+            // --- End specific handling for 'Malam' shift package ---
+
+            // For other shifts (Pagi, Siang, Libur)
+            // Check daily limit for the new shift type
+            if (currentSchedule[dateKey][shiftType].length >= currentLimits[shiftType]) {
+                showModal(`Shift ${shiftType} pada ${dateKey} sudah penuh (${currentLimits[shiftType]} orang).`);
+                // Revert previous shift if any, before returning
+                if (prevShift && prevShift !== 'Tidak Terjadwal') {
+                    currentSchedule[dateKey][prevShift].push(employee);
+                }
+                return;
+            }
+
+            // --- Monthly Leave Limit Validation (for Libur shift) ---
+            if (shiftType === 'Libur') {
+                const allowedLeaveDays = monthlyEmployeeLeaveLimits[employee]; // Adjusted for monthlyEmployeeLeaveLimits structure
+                if (allowedLeaveDays !== undefined) { // Only validate if a limit has been set
+                    const employeeActualLiburCount = countEmployeeMonthlyLeave(employee);
+
+                    if (employeeActualLiburCount >= allowedLeaveDays) {
+                        showModal(`Jumlah hari libur "${employee}" (${employeeActualLiburCount} hari) telah melebihi batas bulanan yang ditentukan (${allowedLeaveDays} hari). Perlu persetujuan supervisor.`);
+                         if (prevShift && prevShift !== 'Tidak Terjadwal') {
+                            currentSchedule[dateKey][prevShift].push(employee);
+                        }
+                        return;
+                    }
+                }
+            }
+            // --- End Monthly Leave Limit Validation ---
+
+
+            // Add employee to the new shift (for Pagi, Siang, Libur)
+            currentSchedule[dateKey][shiftType].push(employee);
+            await saveSchedule();
+            renderSchedule();
+            showModal(`${employee} berhasil ditambahkan ke shift ${shiftType} pada ${dateKey}.`);
+        }
+
+        /**
+         * Remove an employee from a shift.
+         * @param {string} dateKey - Date key.
+         * @param {string} shiftType - Shift type.
+         * @param {string} employeeToRemove - Employee name to remove.
+         */
+        async function removeEmployeeFromShift(dateKey, shiftType, employeeToRemove) {
+            // Only allow removing own shifts for employees
+            if (!isSupervisor && employeeToRemove !== loggedInEmployeeName) {
+                showModal("Anda tidak memiliki izin untuk menghapus jadwal pegawai lain.");
+                return;
+            }
+
+            // If removing from Malam, prompt if related ExtraLibur should also be removed
+            if (shiftType === 'Malam') {
+                const confirmRemove = confirm(`Apakah Anda yakin ingin menghapus ${employeeToRemove} dari dinas Malam ini? Jika ini adalah bagian dari pola dinas malam (2 Malam, 1 Extra Libur, 1 Libur), semua shift terkait juga akan dihapus.`);
+                if (!confirmRemove) {
+                    return;
+                }
+
+                const shiftsToRemove = [];
+                const searchRange = 5;
+
+                for (let i = -searchRange; i <= searchRange; i++) {
+                    const checkDateKey = getDateKeyRelative(dateKey, i);
+                    // Temporarily load schedule for the date to check related shifts
+                    const tempDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/schedules/${currentYear}-${currentMonth}`);
+                    const tempDocSnap = await getDoc(tempDocRef);
+                    const tempSchedule = tempDocSnap.exists() ? tempDocSnap.data() : {};
+
+                    if (tempSchedule[checkDateKey]) {
+                        for (const sType of ['Malam', 'Libur', 'ExtraLibur']) {
+                            if (tempSchedule[checkDateKey][sType] && tempSchedule[checkDateKey][sType].includes(employeeToRemove)) {
+                                shiftsToRemove.push({ dateKey: checkDateKey, shiftType: sType });
+                            }
+                        }
+                    }
+                }
+
+                if (shiftsToRemove.length > 0) {
+                    shiftsToRemove.forEach(shiftInfo => {
+                        const index = currentSchedule[shiftInfo.dateKey][shiftInfo.shiftType].indexOf(employeeToRemove);
+                        if (index > -1) {
+                            currentSchedule[shiftInfo.dateKey][shiftInfo.shiftType].splice(index, 1);
+                        }
+                    });
+                    await saveSchedule();
+                    renderSchedule();
+                    showModal(`${employeeToRemove} dan semua shift terkait (Malam, Extra Libur, dan Libur) telah dihapus.`);
+                    return;
+                }
+            }
+
+            // Normal removal for other shifts (Pagi, Siang, Libur, ExtraLibur, or if Malam was not part of a pattern)
+            const index = currentSchedule[dateKey][shiftType].indexOf(employeeToRemove);
+            if (index > -1) {
+                currentSchedule[dateKey][shiftType].splice(index, 1);
+                await saveSchedule();
+                renderSchedule();
+                showModal(`${employeeToRemove} berhasil dihapus dari shift ${shiftType} pada ${dateKey}.`);
+            } else {
+                showModal(`Pegawai ${employeeToRemove} tidak ditemukan di shift ${shiftType} pada ${dateKey}.`);
+            }
+        }
+
+
+        // --- Recap and Report Functions ---
+
+        /**
+         * Generate monthly recap data.
+         * @returns {object} Recap data per employee.
+         */
+        async function generateMonthlyRecapData() {
+            const recap = {};
+            const allUniqueEmployees = new Set();
+            const shiftsToCount = ['Pagi', 'Siang', 'Malam', 'Libur', 'ExtraLibur'];
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+
+            let schedulesToProcess = {};
+
+            if (isSupervisor) {
+                // Supervisor: Fetch all user schedules
+                const usersCollectionRef = collection(db, `artifacts/${appId}/users`);
+                const userDocs = await getDocs(usersCollectionRef);
+
+                for (const userDoc of userDocs.docs) {
+                    const userId = userDoc.id;
+                    const userData = userDoc.data();
+                    if (!userData.isSupervisor) { // Only process employee schedules
+                        const employeeName = userData.employeeName;
+                        const employeeScheduleDocRef = doc(db, `artifacts/${appId}/users/${userId}/schedules/${currentYear}-${currentMonth}`);
+                        const employeeScheduleSnap = await getDoc(employeeScheduleDocRef);
+                        if (employeeScheduleSnap.exists()) {
+                            // Merge employee's schedule into schedulesToProcess, tagging with employeeName
+                            const empScheduleData = employeeScheduleSnap.data();
+                            for (const dateKey in empScheduleData) {
+                                if (!schedulesToProcess[dateKey]) schedulesToProcess[dateKey] = {};
+                                for (const shiftType in empScheduleData[dateKey]) {
+                                    if (empScheduleData[dateKey][shiftType].includes(employeeName)) {
+                                        if (!schedulesToProcess[dateKey][shiftType]) schedulesToProcess[dateKey][shiftType] = [];
+                                        schedulesToProcess[dateKey][shiftType].push(employeeName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Employee: Use only their own currentSchedule
+                schedulesToProcess = currentSchedule;
+            }
+
+            // Populate allUniqueEmployees
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                if (schedulesToProcess[dateKey]) {
+                    for (const shiftType of shiftsToCount) {
+                        if (schedulesToProcess[dateKey][shiftType]) {
+                            schedulesToProcess[dateKey][shiftType].forEach(employee => {
+                                allUniqueEmployees.add(employee);
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Initialize recap for all unique employees
+            allUniqueEmployees.forEach(employee => {
+                recap[employee] = {};
+                shiftsToCount.forEach(shiftType => {
+                    recap[employee][shiftType] = 0;
+                });
+            });
+
+            // Calculate shifts for each employee for each day
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                const daySchedule = schedulesToProcess[dateKey];
+
+                allUniqueEmployees.forEach(employee => {
+                    for (const shiftType of shiftsToCount) {
+                        if (daySchedule && daySchedule[shiftType] && daySchedule[shiftType].includes(employee)) {
+                            recap[employee][shiftType]++;
+                            break; // Employee can only be on one shift per day
+                        }
+                    }
+                });
+            }
+            return recap;
+        }
+
+
+        /**
+         * Render monthly recap table.
+         * @param {object} recapData - Recap data.
+         */
+        function renderMonthlyRecapTable(recapData) {
+            let html = `<table class="min-w-full bg-white rounded-lg shadow overflow-hidden">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">Nama Pegawai</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Pagi</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Siang</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Malam</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Libur</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Extra Libur</th>
+                                    <th class="py-3 px-4 text-center text-sm font-medium text-gray-600 uppercase tracking-wider">Total Hari Kerja</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">`;
+
+            const sortedEmployees = Object.keys(recapData).sort();
+
+            if (sortedEmployees.length === 0) {
+                html += `<tr><td colspan="7" class="py-4 text-center text-gray-500 italic">Belum ada data jadwal untuk bulan ini.</td></tr>`;
+            } else {
+                sortedEmployees.forEach(employee => {
+                    const data = recapData[employee];
+                    const totalWorkDays = data['Pagi'] + data['Siang'] + data['Malam'];
+                    html += `<tr class="hover:bg-gray-50 transition duration-150 ease-in-out">
+                                <td class="py-3 px-4 text-sm font-semibold text-gray-800">${employee}</td>
+                                <td class="py-3 px-4 text-center text-sm text-gray-700">${data['Pagi']}</td>
+                                <td class="py-3 px-4 text-center text-sm text-gray-700">${data['Siang']}</td>
+                                <td class="py-3 px-4 text-center text-sm text-gray-700">${data['Malam']}</td>
+                                <td class="py-3 px-4 text-center text-sm text-gray-700">${data['Libur']}</td>
+                                <td class="py-3 px-4 text-center text-sm text-gray-700">${data['ExtraLibur']}</td>
+                                <td class="py-3 px-4 text-center text-sm font-bold text-gray-700">${totalWorkDays}</td>
+                             </tr>`;
+                });
+            }
+
+            html += `</tbody></table>`;
+            recapContent.innerHTML = html;
+        }
+
+        /**
+         * Download monthly recap as CSV.
+         */
+        async function downloadMonthlyRecapCsv() {
+            const recapData = await generateMonthlyRecapData(); // Await because generateMonthlyRecapData is now async
+            let csvContent = "Nama Pegawai,Pagi,Siang,Malam,Libur,Extra Libur,Total Hari Kerja\n"; // Headers
+
+            const sortedEmployees = Object.keys(recapData).sort();
+            sortedEmployees.forEach(employee => {
+                const data = recapData[employee];
+                const totalWorkDays = data['Pagi'] + data['Siang'] + data['Malam'];
+                csvContent += `"${employee}",${data['Pagi']},${data['Siang']},${data['Malam']},${data['Libur']},${data['ExtraLibur']},${totalWorkDays}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `Rekap_Bulanan_${BULAN_INDONESIA[currentMonth]}_${currentYear}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                showModal("Browser Anda tidak mendukung fitur unduh otomatis.");
+            }
+        }
+
+        /**
+         * Generate and display daily recap.
+         */
+        async function generateDailyRecap() {
+            const allUniqueEmployees = new Set();
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+            const datesOfMonth = [];
+            const allSchedules = {}; // To store combined schedules from all users
+
+            // Supervisor needs to fetch schedules from all users
+            if (isSupervisor) {
+                const usersCollectionRef = collection(db, `artifacts/${appId}/users`);
+                const userDocs = await getDocs(usersCollectionRef);
+
+                for (const userDoc of userDocs.docs) {
+                    const userId = userDoc.id;
+                    const userData = userDoc.data();
+                    const employeeName = userData.employeeName;
+
+                    const employeeScheduleDocRef = doc(db, `artifacts/${appId}/users/${userId}/schedules/${currentYear}-${currentMonth}`);
+                    const employeeScheduleSnap = await getDoc(employeeScheduleDocRef);
+
+                    if (employeeScheduleSnap.exists()) {
+                        const empScheduleData = employeeScheduleSnap.data();
+                        for (const dateKey in empScheduleData) {
+                            if (!allSchedules[dateKey]) allSchedules[dateKey] = {};
+                            for (const shiftType in empScheduleData[dateKey]) {
+                                if (empScheduleData[dateKey][shiftType].includes(employeeName)) {
+                                    if (!allSchedules[dateKey][shiftType]) allSchedules[dateKey][shiftType] = [];
+                                    allSchedules[dateKey][shiftType].push(employeeName);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Employees only see their own schedule in this view, if this view is meant to be individual.
+                // For a shared daily recap, a supervisor would ideally export it.
+                // For this function, let's assume it always displays a "summary" for supervisor,
+                // and a personal view for employee if supervisor mode is off.
+                // Revert to displaying only current user's data for non-supervisors.
+                allSchedules = currentSchedule;
+            }
+
+
+            // Populate allUniqueEmployees and date keys for columns
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                datesOfMonth.push(dateKey); // Store date keys for column headers
+
+                if (allSchedules[dateKey]) {
+                    for (const shiftType in allSchedules[dateKey]) {
+                        if (allSchedules[dateKey][shiftType]) {
+                            allSchedules[dateKey][shiftType].forEach(employee => {
+                                allUniqueEmployees.add(employee);
+                            });
+                        }
+                    }
+                }
+            }
+            const sortedEmployees = Array.from(allUniqueEmployees).sort();
+
+            let html = `<table class="min-w-full bg-white rounded-lg shadow overflow-hidden">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="py-3 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Nama Petugas</th>`;
+            // Date Headers
+            datesOfMonth.forEach((dateKey) => {
+                const date = new Date(dateKey);
+                // Display day number and first letter of day name (e.g., "1 (S)")
+                html += `<th class="py-3 px-1 text-center text-xs font-medium text-gray-600 uppercase tracking-wider">${date.getDate()} (${HARI_INDONESIA[date.getDay()].substring(0, 1)})</th>`;
+            });
+            html += `</tr></thead><tbody class="divide-y divide-gray-100">`;
+
+            if (sortedEmployees.length === 0) {
+                html += `<tr><td colspan="${daysInMonth + 1}" class="py-4 text-center text-gray-500 italic">Belum ada data jadwal untuk bulan ini.</td></tr>`;
+            } else {
+                sortedEmployees.forEach(employee => {
+                    html += `<tr class="hover:bg-gray-50 transition duration-150 ease-in-out">
+                                <td class="py-2 px-2 text-xs font-semibold text-gray-800">${employee}</td>`;
+                    datesOfMonth.forEach(dateKey => {
+                        let shiftCode = ' '; // Empty for unscheduled, or 'L' for explicit Libur, 'EL' for Extra Libur
+                        const daySchedule = allSchedules[dateKey];
+                        if (daySchedule) {
+                            if (daySchedule['Pagi'].includes(employee)) shiftCode = 'P';
+                            else if (daySchedule['Siang'].includes(employee)) shiftCode = 'S';
+                            else if (daySchedule['Malam'].includes(employee)) shiftCode = 'M';
+                            else if (daySchedule['Libur'].includes(employee)) shiftCode = 'L'; // Explicit Libur
+                            else if (daySchedule['ExtraLibur'].includes(employee)) shiftCode = 'EL'; // Explicit Extra Libur
+                        }
+                        html += `<td class="py-2 px-1 text-center text-xs text-gray-700">${shiftCode}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+            }
+
+            html += `</tbody></table>`;
+            dailyRecapContent.innerHTML = html;
+            dailyRecapModal.style.display = 'flex';
+        }
+
+        /**
+         * Download daily recap as CSV.
+         */
+        async function downloadDailyRecapCsv() {
+            const allUniqueEmployees = new Set();
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+            const datesOfMonth = [];
+            const allSchedules = {}; // To store combined schedules from all users
+
+            if (isSupervisor) {
+                const usersCollectionRef = collection(db, `artifacts/${appId}/users`);
+                const userDocs = await getDocs(usersCollectionRef);
+
+                for (const userDoc of userDocs.docs) {
+                    const userId = userDoc.id;
+                    const userData = userDoc.data();
+                    const employeeName = userData.employeeName;
+
+                    const employeeScheduleDocRef = doc(db, `artifacts/${appId}/users/${userId}/schedules/${currentYear}-${currentMonth}`);
+                    const employeeScheduleSnap = await getDoc(employeeScheduleDocRef);
+
+                    if (employeeScheduleSnap.exists()) {
+                        const empScheduleData = employeeScheduleSnap.data();
+                        for (const dateKey in empScheduleData) {
+                            if (!allSchedules[dateKey]) allSchedules[dateKey] = {};
+                            for (const shiftType in empScheduleData[dateKey]) {
+                                if (empScheduleData[dateKey][shiftType].includes(employeeName)) {
+                                    if (!allSchedules[dateKey][shiftType]) allSchedules[dateKey][shiftType] = [];
+                                    allSchedules[dateKey][shiftType].push(employeeName);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                allSchedules = currentSchedule;
+            }
+
+
+            // Populate all unique employees and date keys for columns
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                datesOfMonth.push(dateKey);
+                if (allSchedules[dateKey]) {
+                    for (const shiftType in allSchedules[dateKey]) {
+                        if (allSchedules[dateKey][shiftType]) {
+                            allSchedules[dateKey][shiftType].forEach(employee => {
+                                allUniqueEmployees.add(employee);
+                            });
+                        }
+                    }
+                }
+            }
+            const sortedEmployees = Array.from(allUniqueEmployees).sort();
+
+            // Create CSV headers
+            let csvContent = "Nama Petugas";
+            datesOfMonth.forEach(dateKey => {
+                const date = new Date(dateKey);
+                csvContent += `,"${date.getDate()}/${(date.getMonth() + 1)} (${HARI_INDONESIA[date.getDay()].substring(0, 1)})"`; // e.g., "1/6 (S)"
+            });
+            csvContent += "\n";
+
+            // Add rows
+            if (sortedEmployees.length > 0) {
+                sortedEmployees.forEach(employee => {
+                    csvContent += `"${employee}"`; // Enclose names in quotes for CSV
+                    datesOfMonth.forEach(dateKey => {
+                        let shiftCode = ' '; // Empty for unscheduled, or 'L' for explicit Libur, 'EL' for Extra Libur
+                        const daySchedule = allSchedules[dateKey];
+                        if (daySchedule) {
+                            if (daySchedule['Pagi'].includes(employee)) shiftCode = 'P';
+                            else if (daySchedule['Siang'].includes(employee)) shiftCode = 'S';
+                            else if (daySchedule['Malam'].includes(employee)) shiftCode = 'M';
+                            else if (daySchedule['Libur'].includes(employee)) shiftCode = 'L'; // Explicit Libur
+                            else if (daySchedule['ExtraLibur'].includes(employee)) shiftCode = 'EL'; // Explicit Extra Libur
+                        }
+                        csvContent += `,"${shiftCode}"`; // Enclose shift codes in quotes for consistency
+                    });
+                    csvContent += "\n";
+                });
+            }
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `Rangkuman_Jadwal_Harian_${BULAN_INDONESIA[currentMonth]}_${currentYear}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                showModal("Browser Anda tidak mendukung fitur unduh otomatis.");
+            }
+        }
+
+        /**
+         * Display current leave limits (for supervisor).
+         */
+        async function displayCurrentLeaveLimits() {
+            leaveLimitsList.innerHTML = '';
+            if (!currentUser || !isSupervisor) return;
+
+            const supervisorConfigRef = doc(db, `artifacts/${appId}/supervisor_config/${currentUser.uid}`);
+            const supervisorConfigSnap = await getDoc(supervisorConfigRef);
+            if (supervisorConfigSnap.exists() && supervisorConfigSnap.data().leaveLimits) {
+                const limitsForMonth = supervisorConfigSnap.data().leaveLimits[`${currentYear}-${currentMonth}`] || {};
+                monthlyEmployeeLeaveLimits = limitsForMonth; // Update local state for consistency
+
+                if (Object.keys(limitsForMonth).length > 0) {
+                    for (const employee in limitsForMonth) {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = `${employee}: ${limitsForMonth[employee]} hari`;
+                        leaveLimitsList.appendChild(listItem);
+                    }
+                } else {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = "Belum ada batas cuti yang diatur untuk bulan ini.";
+                    leaveLimitsList.appendChild(listItem);
+                }
+            } else {
+                monthlyEmployeeLeaveLimits = {}; // Clear if no limits found
+                const listItem = document.createElement('li');
+                listItem.textContent = "Belum ada batas cuti yang diatur untuk bulan ini.";
+                leaveLimitsList.appendChild(listItem);
+            }
+        }
+
+        /**
+         * Change supervisor password.
+         */
+        async function changeSupervisorPassword() {
+            const currentPass = currentPasswordInput.value;
+            const newPass = newPasswordInput.value;
+            const confirmNewPass = confirmNewPasswordInput.value;
+
+            if (!currentUser) {
+                showModal("Anda harus login untuk mengubah kata sandi.");
+                return;
+            }
+            if (!isSupervisor) {
+                showModal("Anda tidak memiliki izin supervisor.");
+                return;
+            }
+
+            if (newPass.length < 6) { // Firebase requires min 6 chars for password
+                showModal("Kata sandi baru minimal 6 karakter.");
+                return;
+            }
+
+            if (newPass !== confirmNewPass) {
+                showModal("Kata sandi baru dan konfirmasi tidak cocok.");
+                return;
+            }
+
+            loadingOverlay.classList.remove('hidden');
+            try {
+                // Re-authenticate user if needed (e.g., if session is old).
+                // For simplicity, we directly update password. In a real app,
+                // you'd re-authenticate using `reauthenticateWithCredential`.
+                await updatePassword(currentUser, newPass);
+                showModal("Kata sandi supervisor berhasil diubah!");
+                changePasswordModal.style.display = 'none';
+                currentPasswordInput.value = '';
+                newPasswordInput.value = '';
+                confirmNewPasswordInput.value = '';
+            } catch (error) {
+                console.error("Error changing password:", error);
+                showModal(`Gagal mengubah kata sandi: ${error.message}. Anda mungkin perlu login ulang.`);
+            } finally {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+
+        // --- Event Listeners ---
+
+        // Landing Page buttons
+        employeeModeBtn.addEventListener('click', signInEmployee);
+        supervisorModeBtn.addEventListener('click', showSupervisorAuthPage);
+        backToLandingBtn.addEventListener('click', showLandingPage);
+
+        // Supervisor Auth buttons
+        supervisorLoginBtn.addEventListener('click', handleSupervisorLogin);
+        supervisorSignupBtn.addEventListener('click', handleSupervisorSignup);
+
+        // Main App buttons
+        logoutBtn.addEventListener('click', handleLogout);
+
+        generateScheduleBtn.addEventListener('click', async () => {
+            currentMonth = parseInt(monthSelect.value);
+            currentYear = parseInt(yearInput.value);
+            await loadScheduleAndLimits();
+            renderSchedule();
+        });
+
+        showRecapBtn.addEventListener('click', async () => {
+            const recapData = await generateMonthlyRecapData(); // Await data generation
+            renderMonthlyRecapTable(recapData);
+            recapModal.style.display = 'flex';
+        });
+
+        downloadMonthlyRecapCsvBtn.addEventListener('click', downloadMonthlyRecapCsv);
+        showDailyRecapBtn.addEventListener('click', generateDailyRecap);
+        downloadDailyRecapCsvBtn.addEventListener('click', downloadDailyRecapCsv);
+
+        setLeaveLimitsBtn.addEventListener('click', async () => {
+            if (!isSupervisor) {
+                showModal("Anda tidak memiliki izin supervisor untuk mengatur batas cuti.");
+                return;
+            }
+            await displayCurrentLeaveLimits(); // Show current limits when modal opens
+            setLeaveLimitsModal.style.display = 'flex';
+            // Enable/disable input and save button based on supervisor mode
+            leaveLimitsInput.disabled = false; // Always enabled for supervisor
+            saveLeaveLimitsBtn.disabled = false;
+            saveLeaveLimitsBtn.textContent = "Simpan Batas Cuti";
+            saveLeaveLimitsBtn.className = 'mt-4 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md';
+        });
+
+        saveLeaveLimitsBtn.addEventListener('click', async () => {
+            if (!isSupervisor) {
+                showModal("Anda tidak memiliki izin supervisor untuk menyimpan batas cuti.");
+                return;
+            }
+            const input = leaveLimitsInput.value.trim();
+            const newLimits = {};
+            input.split('\n').forEach(line => {
+                const parts = line.split(':');
+                if (parts.length === 2) {
+                    const name = parts[0].trim();
+                    const limit = parseInt(parts[1].trim());
+                    if (name && !isNaN(limit)) {
+                        newLimits[name] = limit;
+                    }
+                }
+            });
+
+            await saveLeaveLimitsToFirestore(newLimits);
+            showModal("Batas cuti bulanan berhasil disimpan!");
+            setLeaveLimitsModal.style.display = 'none';
+        });
+
+        changeSupervisorPasswordBtn.addEventListener('click', () => {
+            if (!isSupervisor) {
+                showModal("Anda tidak memiliki izin supervisor untuk mengubah kata sandi.");
+                return;
+            }
+            changePasswordModal.style.display = 'flex';
+            currentPasswordInput.value = '';
+            newPasswordInput.value = '';
+            confirmNewPasswordInput.value = '';
+        });
+
+        saveNewPasswordBtn.addEventListener('click', changeSupervisorPassword);
+
+        // Event listeners for closing modals
+        closeButton.onclick = hideModal;
+        modalCloseBtn.onclick = hideModal;
+        recapCloseButton.onclick = () => recapModal.style.display = 'none';
+        recapCloseBtn.onclick = () => recapModal.style.display = 'none';
+        dailyRecapCloseButton.onclick = () => dailyRecapModal.style.display = 'none';
+        dailyRecapCloseBtn.onclick = () => dailyRecapModal.style.display = 'none';
+        setLeaveLimitsCloseButton.onclick = () => setLeaveLimitsModal.style.display = 'none';
+        changePasswordCloseButton.onclick = () => changePasswordModal.style.display = 'none';
+
+        window.onclick = function(event) {
+            if (event.target == infoModal) { hideModal(); }
+            if (event.target == recapModal) { recapModal.style.display = 'none'; }
+            if (event.target == dailyRecapModal) { dailyRecapModal.style.display = 'none'; }
+            if (event.target == setLeaveLimitsModal) { setLeaveLimitsModal.style.display = 'none'; }
+            if (event.target == changePasswordModal) { changePasswordModal.style.display = 'none'; }
+        };
+
+        // --- Initialization ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeMonthYearPicker();
+            const today = new Date();
+            monthSelect.value = today.getMonth();
+            yearInput.value = today.getFullYear();
+
+            // Show loading overlay initially until Firebase auth state is resolved
+            loadingOverlay.classList.remove('hidden');
+        });
+
+        /**
+         * Initialize month and year dropdowns.
+         */
+        function initializeMonthYearPicker() {
+            BULAN_INDONESIA.forEach((month, index) => {
+                const option = document.createElement('option');
+                option.value = index; // 0-indexed month
+                option.textContent = month;
+                monthSelect.appendChild(option);
+            });
+        }
+    </script>
+</body>
+</html>
